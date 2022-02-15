@@ -2,8 +2,6 @@ const url = require('url');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const {access} = require('fs/promises');
-const {pipeline} = require('stream');
 
 const LimitSizeStream = require('./LimitSizeStream');
 
@@ -14,38 +12,42 @@ server.on('request', (req, res) => {
   const pathname = url.pathname.slice(1);
 
   const filepath = path.join(__dirname, 'files', pathname);
-  if (pathname.match(/\//g)) {
-    res.statusCode = 400;
-    res.end();
-  }
+
   switch (req.method) {
     case 'POST':
-      const limitedStream = new LimitSizeStream({limit: 100000, encoding: 'utf-8'});
-      access(filepath)
-          .then(()=>{
-            res.statusCode = 409;
-            res.end('Файл уже существует');
-          })
-          .catch((error)=>{
-            if (error.code === 'ENOENT') {
-              const stream = fs.createWriteStream(filepath);
-              pipeline(req,
-                  limitedStream,
-                  stream,
-                  (err)=>{
-                    if (err) {
-                      if (err.code === 'LIMIT_EXCEEDED') {
-                        res.statusCode = 413;
-                      }
-                      fs.unlink(filepath, ()=> {});
-                      res.end();
-                    } else {
-                      res.statusCode = 201;
-                      res.end();
-                    }
+      if (pathname.match(/\//g)) {
+        res.statusCode = 400;
+        res.end();
+      } else {
+        fs.access(filepath, (error)=>{
+          if (error && error.code === 'ENOENT') {
+            const limitedStream = new LimitSizeStream({limit: 100000, encoding: 'utf-8'});
+            const stream = fs.createWriteStream(filepath);
+            req.on('error', (error)=>{
+              if (error.code === 'ECONRESET') {
+                fs.unlink(filepath, (error)=>{});
+              }
+            })
+                .pipe(limitedStream)
+                .om('error', (error)=>{
+                  fs.unlink(filepath, ()=>{
+                    res.statusCode = 413;
+                    res.end();
                   });
-            }
-          });
+                })
+                .pipe(stream)
+                .on('finish', ()=>{
+                  res.statusCode = 201;
+                  res.end();
+                });
+          } else {
+            res.statusCode = 409;
+            res.end();
+          }
+        });
+      }
+
+
       break;
     default:
       res.statusCode = 501;
