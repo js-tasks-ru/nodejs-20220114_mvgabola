@@ -23,13 +23,14 @@ server.on('request', (req, res) => {
           if (error && error.code === 'ENOENT') {
             const limitedStream = new LimitSizeStream({limit: 100000, encoding: 'utf-8'});
             const stream = fs.createWriteStream(filepath);
-            req.on('error', (error)=>{
-              if (error.code === 'ECONRESET') {
-                fs.unlink(filepath, (error)=>{});
-              }
-            })
+            req
+                .on('error', (error)=>{
+                  if (error.code === 'ECONRESET') {
+                    fs.unlink(filepath, (error)=>{});
+                  }
+                })
                 .pipe(limitedStream)
-                .om('error', (error)=>{
+                .on('error', (error)=>{
                   fs.unlink(filepath, ()=>{
                     res.statusCode = 413;
                     res.end();
@@ -40,14 +41,16 @@ server.on('request', (req, res) => {
                   res.statusCode = 201;
                   res.end();
                 });
+
+            req.on('aborted', ()=>{
+              fs.unlink(filepath, (error)=>{});
+            });
           } else {
             res.statusCode = 409;
             res.end();
           }
         });
       }
-
-
       break;
     default:
       res.statusCode = 501;
