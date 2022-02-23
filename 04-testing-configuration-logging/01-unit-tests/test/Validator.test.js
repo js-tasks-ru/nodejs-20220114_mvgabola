@@ -12,7 +12,7 @@ describe('testing-configuration-logging/unit-tests', () => {
         },
       });
 
-      const errors = validator.validate({name: 'Lalala'});
+      const errors = validator.validate({ name: 'Lalala' });
 
       expect(errors).to.have.length(1);
       expect(errors[0]).to.have.property('field').and.to.be.equal('name');
